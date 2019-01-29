@@ -19,7 +19,7 @@ For example, to reproduce the `synthetic data` experiments, you can try:
 cd oracle/experiments
 python3 oracle_relgan.py [job_id] [gpu_id]
 ```
-or `COCO Image Captions data`:
+or `COCO Image Captions`:
 ```
 cd real/experiments
 python3 coco_relgan.py [job_id] [gpu_id]
