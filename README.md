@@ -1,8 +1,9 @@
-## RelGAN: Relational Generative Adversarial Networks for Text Generation
+## RelGAN
+
 This repository contains the code to reproduce the core results 
 from the paper [RelGAN: Relational Generative Adversarial Networks for Text Generation](https://openreview.net/pdf?id=rJedV3R5tm).
 
-# Dependencies
+## Dependencies
 This project uses Python 3.5.2, with the following lib dependencies:
 * [Tensorflow 1.4](https://www.tensorflow.org/)
 * [Numpy 1.14.1](http://www.numpy.org/)
