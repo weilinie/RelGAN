@@ -8,9 +8,9 @@ This project uses Python 3.5.2, with the following lib dependencies:
 * [Tensorflow 1.4](https://www.tensorflow.org/)
 * [Numpy 1.14.1](http://www.numpy.org/)
 * [Matplotlib 2.2.0](https://matplotlib.org)
+* [Scipy 1.0.0](https://www.scipy.org)
 * [NLTK 3.2.3](https://www.nltk.org)
 * [tqdm 4.19.6](https://pypi.python.org/pypi/tqdm)
-* [CUDA 8.0](https://developer.nvidia.com/cuda-toolkit-archive)
 
 
 ## Instructions
