@@ -118,6 +118,7 @@ def conv2d(input_, out_nums, k_h=2, k_w=1, d_h=2, d_w=1, stddev=None, sn=False, 
 
 
 def self_attention(x, ch, sn=False):
+    """self-attention for GAN"""
     f = conv2d(x, ch // 8, k_h=1, d_h=1, sn=sn, scope='f_conv')  # [bs, h, w, c']
     g = conv2d(x, ch // 8, k_h=1, d_h=1, sn=sn, scope='g_conv')  # [bs, h, w, c']
     h = conv2d(x, ch, k_h=1, d_h=1, sn=sn, scope='h_conv')  # [bs, h, w, c]
@@ -137,6 +138,7 @@ def self_attention(x, ch, sn=False):
 
 
 def spectral_norm(w, iteration=1):
+    """spectral normalization for GANs"""
     w_shape = w.shape.as_list()
     w = tf.reshape(w, [-1, w_shape[-1]])
 
@@ -204,6 +206,7 @@ def add_gumbel_cond(o_t, next_token_onehot, eps=1e-10):
 
 
 def gradient_penalty(discriminator, x_real_onehot, x_fake_onehot_appr, config):
+    """compute the gradiet penalty for the WGAN-GP loss"""
     alpha = tf.random_uniform(shape=[config['batch_size'], 1, 1], minval=0., maxval=1.)
     interpolated = alpha * x_real_onehot + (1. - alpha) * x_fake_onehot_appr
 

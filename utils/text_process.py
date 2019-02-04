@@ -2,21 +2,8 @@
 import nltk
 
 
-def chinese_process(filein, fileout):
-    with open(filein, 'r') as infile:
-        with open(fileout, 'w') as outfile:
-            for line in infile:
-                output = list()
-                line = nltk.word_tokenize(line)[0]
-                for char in line:
-                    output.append(char)
-                    output.append(' ')
-                output.append('\n')
-                output = ''.join(output)
-                outfile.write(output)
-
-
-def text_to_code(tokens, dictionary, seq_len):  # text tokens to code strings
+# text tokens to code strings
+def text_to_code(tokens, dictionary, seq_len):
     code_str = ""
     eof_code = len(dictionary)  # used to filled in the blank to make up a sentence with seq_len
     for sentence in tokens:
@@ -31,7 +18,8 @@ def text_to_code(tokens, dictionary, seq_len):  # text tokens to code strings
     return code_str
 
 
-def code_to_text(codes, dictionary):  # code tokens to text strings
+# code tokens to text strings
+def code_to_text(codes, dictionary):
     paras = ""
     eof_code = len(dictionary)
     for line in codes:
@@ -44,6 +32,7 @@ def code_to_text(codes, dictionary):  # code tokens to text strings
     return paras
 
 
+# tokenlize the file
 def get_tokenlized(file):
     tokenlized = list()
     with open(file) as raw:
@@ -53,6 +42,7 @@ def get_tokenlized(file):
     return tokenlized
 
 
+# get word set
 def get_word_list(tokens):
     word_set = list()
     for sentence in tokens:
@@ -61,6 +51,7 @@ def get_word_list(tokens):
     return list(set(word_set))
 
 
+# get word_index_dict and index_word_dict
 def get_dict(word_set):
     word_index_dict = dict()
     index_word_dict = dict()
@@ -72,6 +63,7 @@ def get_dict(word_set):
     return word_index_dict, index_word_dict
 
 
+# get sequence length and dict size
 def text_precess(train_text_loc, test_text_loc=None):
     train_tokens = get_tokenlized(train_text_loc)
     if test_text_loc is None:
