@@ -4,11 +4,13 @@ from tensorflow.python.ops import tensor_array_ops, control_flow_ops
 from utils.ops import *
 
 
+# The generator network based on the Relational Memory
 def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim, mem_slots, head_size, num_heads,
               hidden_dim, start_token):
     start_tokens = tf.constant([start_token] * batch_size, dtype=tf.int32)
     output_size = mem_slots * head_size * num_heads
 
+    # build relation memory module
     g_embeddings = tf.get_variable('g_emb', shape=[vocab_size, gen_emb_dim],
                                    initializer=create_linear_initializer(vocab_size))
     gen_mem = RelationalMemory(mem_slots=mem_slots, head_size=head_size, num_heads=num_heads)
@@ -23,6 +25,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
     gen_x_onehot_adv = tensor_array_ops.TensorArray(dtype=tf.float32, size=seq_len, dynamic_size=False,
                                                     infer_shape=True)  # generator output (relaxed of gen_x)
 
+    # the generator recurrent module used for adversarial training
     def _gen_recurrence(i, x_t, h_tm1, gen_o, gen_x, gen_x_onehot_adv):
         mem_o_t, h_t = gen_mem(x_t, h_tm1)  # hidden_memory_tuple
         o_t = g_output_unit(mem_o_t)  # batch x vocab, logits not probs
@@ -42,6 +45,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
 
         return i + 1, x_tp1, h_t, gen_o, gen_x, gen_x_onehot_adv
 
+    # build a graph for outputting sequential tokens
     _, _, _, gen_o, gen_x, gen_x_onehot_adv = control_flow_ops.while_loop(
         cond=lambda i, _1, _2, _3, _4, _5: i < seq_len,
         body=_gen_recurrence,
@@ -60,6 +64,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
     ta_emb_x = tensor_array_ops.TensorArray(dtype=tf.float32, size=seq_len)
     ta_emb_x = ta_emb_x.unstack(x_emb)
 
+    # the generator recurrent moddule used for pre-training
     def _pretrain_recurrence(i, x_t, h_tm1, g_predictions):
         mem_o_t, h_t = gen_mem(x_t, h_tm1)
         o_t = g_output_unit(mem_o_t)
@@ -67,6 +72,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
         x_tp1 = ta_emb_x.read(i)
         return i + 1, x_tp1, h_t, g_predictions
 
+    # build a graph for outputting sequential tokens
     _, _, _, g_predictions = control_flow_ops.while_loop(
         cond=lambda i, _1, _2, _3: i < seq_len,
         body=_pretrain_recurrence,
@@ -76,7 +82,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
     g_predictions = tf.transpose(g_predictions.stack(),
                                  perm=[1, 0, 2])  # batch_size x seq_length x vocab_size
 
-    # pretraining loss
+    # pre-training loss
     pretrain_loss = -tf.reduce_sum(
         tf.one_hot(tf.to_int32(tf.reshape(x_real, [-1])), vocab_size, 1.0, 0.0) * tf.log(
             tf.clip_by_value(tf.reshape(g_predictions, [-1, vocab_size]), 1e-20, 1.0)
@@ -86,7 +92,9 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
     return gen_x_onehot_adv, gen_x, pretrain_loss, gen_o
 
 
+# The discriminator network based on the CNN classifier
 def discriminator(x_onehot, batch_size, seq_len, vocab_size, dis_emb_dim, num_rep, sn):
+    # get the embedding dimension for each presentation
     emb_dim_single = int(dis_emb_dim / num_rep)
     assert isinstance(emb_dim_single, int) and emb_dim_single > 0
 

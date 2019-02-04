@@ -32,6 +32,8 @@ def oracle_train(generator, discriminator, oracle_model, oracle_loader, gen_load
     oracle_file = os.path.join(sample_dir, 'oracle.txt')
     gen_file = os.path.join(sample_dir, 'generator.txt')
     csv_file = os.path.join(log_dir, 'experiment-log-relgan.csv')
+
+    # create necessary directories
     if not os.path.exists(data_dir):
         os.makedirs(data_dir)
     if not os.path.exists(sample_dir):
@@ -64,16 +66,16 @@ def oracle_train(generator, discriminator, oracle_model, oracle_loader, gen_load
     g_pretrain_op, g_train_op, d_train_op, temp_train_op = get_train_ops(config, g_pretrain_loss, g_loss, d_loss,
                                                                          log_pg, temperature, global_step)
 
-    # record wall clock time
+    # Record wall clock time
     time_diff = tf.placeholder(tf.float32)
     Wall_clock_time = tf.Variable(0., trainable=False)
     update_Wall_op = Wall_clock_time.assign_add(time_diff)
 
-    # update temperature when not using 'self' adapt
+    # Temperature placeholder
     temp_var = tf.placeholder(tf.float32)
     update_temperature_op = temperature.assign(temp_var)
 
-    # Loss Summaries
+    # Loss summaries
     loss_summaries = [
         tf.summary.scalar('loss/discriminator', d_loss),
         tf.summary.scalar('loss/g_loss', g_loss),
@@ -100,6 +102,7 @@ def oracle_train(generator, discriminator, oracle_model, oracle_loader, gen_load
 
         print('Start pre-training...')
         for epoch in range(npre_epochs):
+            # run pre-training
             g_pretrain_loss_np = pre_train_epoch(sess, g_pretrain_op, g_pretrain_loss, x_real, oracle_loader)
 
             # Test
@@ -130,7 +133,7 @@ def oracle_train(generator, discriminator, oracle_model, oracle_loader, gen_load
 
             t0 = time.time()
 
-            # Train
+            # run adversarial training
             for _ in range(config['gsteps']):
                 sess.run(g_train_op, feed_dict={x_real: oracle_loader.random_batch()})
             for _ in range(config['dsteps']):
@@ -139,6 +142,7 @@ def oracle_train(generator, discriminator, oracle_model, oracle_loader, gen_load
             t1 = time.time()
             sess.run(update_Wall_op, feed_dict={time_diff: t1 - t0})
 
+            # temperature
             temp_var_np = get_fixed_temperature(temper, niter, nadv_steps, adapt)
             sess.run(update_temperature_op, feed_dict={temp_var: temp_var_np})
 
@@ -158,6 +162,7 @@ def oracle_train(generator, discriminator, oracle_model, oracle_loader, gen_load
                 generate_samples(sess, x_fake, batch_size, 120, gen_save_file)
                 gen_loader.create_batches(gen_file)
 
+                # write summaries
                 scores = [metric.get_score() for metric in metrics]
                 metrics_summary_str = sess.run(metric_summary_op, feed_dict=dict(zip(metrics_pl, scores)))
                 sum_writer.add_summary(metrics_summary_str, niter + config['npre_epochs'])
@@ -171,11 +176,12 @@ def oracle_train(generator, discriminator, oracle_model, oracle_loader, gen_load
                 log.write('\n')
 
 
+# A function to get different GAN losses
 def get_losses(d_out_real, d_out_fake, x_real_onehot, x_fake_onehot_appr, gen_o, discriminator, config):
     batch_size = config['batch_size']
     gan_type = config['gan_type']
 
-    if gan_type == 'standard':
+    if gan_type == 'standard':  # the non-satuating GAN loss
         d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=d_out_real, labels=tf.ones_like(d_out_real)
         ))
@@ -188,7 +194,7 @@ def get_losses(d_out_real, d_out_fake, x_real_onehot, x_fake_onehot_appr, gen_o,
             logits=d_out_fake, labels=tf.ones_like(d_out_fake)
         ))
 
-    elif gan_type == 'JS':
+    elif gan_type == 'JS':  # the vanilla GAN loss
         d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=d_out_real, labels=tf.ones_like(d_out_real)
         ))
@@ -199,7 +205,7 @@ def get_losses(d_out_real, d_out_fake, x_real_onehot, x_fake_onehot_appr, gen_o,
 
         g_loss = -d_loss_fake
 
-    elif gan_type == 'KL':
+    elif gan_type == 'KL':  # the GAN loss implicitly minimizing KL-divergence
         d_loss_real = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=d_out_real, labels=tf.ones_like(d_out_real)
         ))
@@ -210,14 +216,14 @@ def get_losses(d_out_real, d_out_fake, x_real_onehot, x_fake_onehot_appr, gen_o,
 
         g_loss = tf.reduce_mean(-d_out_fake)
 
-    elif gan_type == 'hinge':
+    elif gan_type == 'hinge':  # the hinge loss
         d_loss_real = tf.reduce_mean(tf.nn.relu(1.0 - d_out_real))
         d_loss_fake = tf.reduce_mean(tf.nn.relu(1.0 + d_out_fake))
         d_loss = d_loss_real + d_loss_fake
 
         g_loss = -tf.reduce_mean(d_out_fake)
 
-    elif gan_type == 'tv':
+    elif gan_type == 'tv':  # the total variation distance
         d_loss = tf.reduce_mean(tf.tanh(d_out_fake) - tf.tanh(d_out_real))
         g_loss = tf.reduce_mean(-tf.tanh(d_out_fake))
 
@@ -235,7 +241,7 @@ def get_losses(d_out_real, d_out_fake, x_real_onehot, x_fake_onehot_appr, gen_o,
 
         g_loss = tf.reduce_mean(tf.squared_difference(d_out_fake, 1.0))
 
-    elif gan_type == 'RSGAN':  # relativistic standard gan
+    elif gan_type == 'RSGAN':  # relativistic standard GAN
         d_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
             logits=d_out_real - d_out_fake, labels=tf.ones_like(d_out_real)
         ))
@@ -251,6 +257,7 @@ def get_losses(d_out_real, d_out_fake, x_real_onehot, x_fake_onehot_appr, gen_o,
     return log_pg, g_loss, d_loss
 
 
+# A function to calculate the gradients and get training operations
 def get_train_ops(config, g_pretrain_loss, g_loss, d_loss, log_pg, temperature, global_step):
     optimizer_name = config['optimizer']
     nadv_steps = config['nadv_steps']
@@ -299,6 +306,7 @@ def get_train_ops(config, g_pretrain_loss, g_loss, d_loss, log_pg, temperature, 
     return g_pretrain_op, g_train_op, d_train_op, temp_train_op
 
 
+# A function to get various evaluation metrics
 def get_metrics(config, oracle_loader, gen_loader, oracle_file, gen_file, oracle_model, g_pretrain_loss, x_real, sess):
     # set up evaluation metric
     metrics = []
@@ -315,6 +323,7 @@ def get_metrics(config, oracle_loader, gen_loader, oracle_file, gen_file, oracle
     return metrics
 
 
+# A function to get the summary for each metric
 def get_metric_summary_op(config):
     metrics_pl = []
     metrics_sum = []

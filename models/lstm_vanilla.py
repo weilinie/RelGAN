@@ -7,6 +7,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
               hidden_dim, start_token):
     start_tokens = tf.constant([start_token] * batch_size, dtype=tf.int32)
 
+    # build LSTM unit
     g_embeddings = tf.get_variable('g_emb', shape=[vocab_size, gen_emb_dim],
                                    initializer=create_linear_initializer(vocab_size))
     gen_mem = create_recurrent_unit(emb_dim=gen_emb_dim, hidden_dim=hidden_dim)
@@ -22,6 +23,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
     gen_x_onehot_adv = tensor_array_ops.TensorArray(dtype=tf.float32, size=seq_len, dynamic_size=False,
                                                     infer_shape=True)  # generator output (relaxed of gen_x)
 
+    # the generator recurrent module used for adversarial training
     def _gen_recurrence(i, x_t, h_tm1, gen_o, gen_x, gen_x_onehot_adv):
         h_t = gen_mem(x_t, h_tm1)  # hidden_memory_tuple
         o_t = g_output_unit(h_t)  # batch x vocab, logits not probs
@@ -41,6 +43,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
 
         return i + 1, x_tp1, h_t, gen_o, gen_x, gen_x_onehot_adv
 
+    # build a graph for outputting sequential tokens
     _, _, _, gen_o, gen_x, gen_x_onehot_adv = control_flow_ops.while_loop(
         cond=lambda i, _1, _2, _3, _4, _5: i < seq_len,
         body=_gen_recurrence,
@@ -59,6 +62,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
     ta_emb_x = tensor_array_ops.TensorArray(dtype=tf.float32, size=seq_len)
     ta_emb_x = ta_emb_x.unstack(x_emb)
 
+    # the generator recurrent moddule used for pre-training
     def _pretrain_recurrence(i, x_t, h_tm1, g_predictions):
         h_t = gen_mem(x_t, h_tm1)
         o_t = g_output_unit(h_t)
@@ -66,6 +70,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
         x_tp1 = ta_emb_x.read(i)
         return i + 1, x_tp1, h_t, g_predictions
 
+    # build a graph for outputting sequential tokens
     _, _, _, g_predictions = control_flow_ops.while_loop(
         cond=lambda i, _1, _2, _3: i < seq_len,
         body=_pretrain_recurrence,
@@ -75,7 +80,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
     g_predictions = tf.transpose(g_predictions.stack(),
                                  perm=[1, 0, 2])  # batch_size x seq_length x vocab_size
 
-    # pretraining loss
+    # pre-training loss
     pretrain_loss = -tf.reduce_sum(
         tf.one_hot(tf.to_int32(tf.reshape(x_real, [-1])), vocab_size, 1.0, 0.0) * tf.log(
             tf.clip_by_value(tf.reshape(g_predictions, [-1, vocab_size]), 1e-20, 1.0)
