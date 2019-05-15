@@ -370,7 +370,10 @@ def get_metric_summary_op(config):
 
 
 # A function to set up different temperature control policies
-def get_fixed_temperature(temper, i, N, adapt):
+def get_fixed_temperature(temper, i, nadv_steps, adapt):
+    # using a fixed number of maximum adversarial steps
+    N = 5000
+    assert nadv_steps <= N
     if adapt == 'no':
         temper_var_np = temper  # no increase
     elif adapt == 'lin':
