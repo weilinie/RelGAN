@@ -95,6 +95,9 @@ def real_train(generator, discriminator, oracle_loader, config):
     # Metric Summaries
     metrics_pl, metric_summary_op = get_metric_summary_op(config)
 
+    # saver
+    saver = tf.train.Saver(max_to_keep=10)
+
     # ------------- initial the graph --------------
     with init_sess() as sess:
         log = open(csv_file, 'w')
@@ -132,6 +135,9 @@ def real_train(generator, discriminator, oracle_loader, config):
                 print(msg)
                 log.write(msg)
                 log.write('\n')
+
+                # save the model
+                saver.save(sess, os.path.join(log_dir, 'ckpt', dataset + '.pre_model'), global_step=epoch)
 
         print('Start adversarial training...')
         progress = tqdm(range(nadv_steps))
@@ -181,6 +187,9 @@ def real_train(generator, discriminator, oracle_loader, config):
                 print(msg)
                 log.write(msg)
                 log.write('\n')
+
+                # save the model
+                saver.save(sess, os.path.join(log_dir, 'ckpt', dataset + '.adv_model'), global_step=global_step)
 
 
 # A function to get different GAN losses
