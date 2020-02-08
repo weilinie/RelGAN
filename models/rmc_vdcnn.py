@@ -88,7 +88,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
         )
     ) / (seq_len * batch_size)
 
-    return gen_x_onehot_adv, gen_x, pretrain_loss
+    return gen_x_onehot_adv, gen_x, pretrain_loss, gen_o
 
 
 def discriminator(x_onehot, batch_size, seq_len, vocab_size, dis_emb_dim, num_rep, sn, is_train=True):
