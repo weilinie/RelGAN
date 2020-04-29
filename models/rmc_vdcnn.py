@@ -52,11 +52,10 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
         loop_vars=(tf.constant(0, dtype=tf.int32), tf.nn.embedding_lookup(g_embeddings, start_tokens),
                    init_states, gen_o, gen_x, gen_x_onehot_adv))
 
-    gen_x = gen_x.stack()  # seq_len x batch_size
-    gen_x = tf.transpose(gen_x, perm=[1, 0])  # batch_size x seq_len
+    gen_o = tf.transpose(gen_o.stack(), perm=[1, 0])  # batch_size x seq_len
+    gen_x = tf.transpose(gen_x.stack(), perm=[1, 0])  # batch_size x seq_len
 
-    gen_x_onehot_adv = gen_x_onehot_adv.stack()
-    gen_x_onehot_adv = tf.transpose(gen_x_onehot_adv, perm=[1, 0, 2])  # batch_size x seq_len x vocab_size
+    gen_x_onehot_adv = tf.transpose(gen_x_onehot_adv.stack(), perm=[1, 0, 2])  # batch_size x seq_len x vocab_size
 
     # ----------- pre-training for generator -----------------
     x_emb = tf.transpose(tf.nn.embedding_lookup(g_embeddings, x_real), perm=[1, 0, 2])  # seq_len x batch_size x emb_dim
@@ -65,6 +64,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
     ta_emb_x = tensor_array_ops.TensorArray(dtype=tf.float32, size=seq_len)
     ta_emb_x = ta_emb_x.unstack(x_emb)
 
+    # the generator recurrent moddule used for pre-training
     def _pretrain_recurrence(i, x_t, h_tm1, g_predictions):
         mem_o_t, h_t = gen_mem(x_t, h_tm1)
         o_t = g_output_unit(mem_o_t)
@@ -72,6 +72,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
         x_tp1 = ta_emb_x.read(i)
         return i + 1, x_tp1, h_t, g_predictions
 
+    # build a graph for outputting sequential tokens
     _, _, _, g_predictions = control_flow_ops.while_loop(
         cond=lambda i, _1, _2, _3: i < seq_len,
         body=_pretrain_recurrence,
@@ -81,7 +82,7 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
     g_predictions = tf.transpose(g_predictions.stack(),
                                  perm=[1, 0, 2])  # batch_size x seq_length x vocab_size
 
-    # pretraining loss
+    # pre-training loss
     pretrain_loss = -tf.reduce_sum(
         tf.one_hot(tf.to_int32(tf.reshape(x_real, [-1])), vocab_size, 1.0, 0.0) * tf.log(
             tf.clip_by_value(tf.reshape(g_predictions, [-1, vocab_size]), 1e-20, 1.0)
