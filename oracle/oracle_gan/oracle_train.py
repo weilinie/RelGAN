@@ -56,15 +56,14 @@ def oracle_train(generator, discriminator, oracle_model, oracle_loader, gen_load
 
     # GAN / Divergence type
     log_pg, g_loss, d_loss = get_losses(d_out_real, d_out_fake, x_real_onehot, x_fake_onehot_appr,
-                                                    gen_o, discriminator, config)
+                                        gen_o, discriminator, config)
 
     # Global step
     global_step = tf.Variable(0, trainable=False)
     global_step_op = global_step.assign_add(1)
 
     # Train ops
-    g_pretrain_op, g_train_op, d_train_op, temp_train_op = get_train_ops(config, g_pretrain_loss, g_loss, d_loss,
-                                                                         log_pg, temperature, global_step)
+    g_pretrain_op, g_train_op, d_train_op = get_train_ops(config, g_pretrain_loss, g_loss, d_loss, global_step)
 
     # Record wall clock time
     time_diff = tf.placeholder(tf.float32)
@@ -131,7 +130,7 @@ def oracle_train(generator, discriminator, oracle_model, oracle_loader, gen_load
                 log.write('\n')
 
                 # save the model
-                saver.save(sess, os.path.join(log_dir,  'ckpt', 'oracle.pre_model'), global_step=epoch)
+                saver.save(sess, os.path.join(log_dir, 'ckpt', 'oracle.pre_model'), global_step=epoch)
 
         print('Start adversarial training...')
         progress = tqdm(range(nadv_steps))
@@ -183,7 +182,7 @@ def oracle_train(generator, discriminator, oracle_model, oracle_loader, gen_load
                 log.write('\n')
 
                 # save the model
-                saver.save(sess, os.path.join(log_dir,  'ckpt', 'oracle.adv_model'), global_step=global_step)
+                saver.save(sess, os.path.join(log_dir, 'ckpt', 'oracle.adv_model'), global_step=global_step)
 
 
 # A function to get different GAN losses
@@ -237,14 +236,14 @@ def get_losses(d_out_real, d_out_fake, x_real_onehot, x_fake_onehot_appr, gen_o,
         d_loss = tf.reduce_mean(tf.tanh(d_out_fake) - tf.tanh(d_out_real))
         g_loss = tf.reduce_mean(-tf.tanh(d_out_fake))
 
-    elif gan_type == 'wgan-gp': # WGAN-GP
+    elif gan_type == 'wgan-gp':  # WGAN-GP
         d_loss = tf.reduce_mean(d_out_fake) - tf.reduce_mean(d_out_real)
         GP = gradient_penalty(discriminator, x_real_onehot, x_fake_onehot_appr, config)
         d_loss += GP
 
         g_loss = -tf.reduce_mean(d_out_fake)
 
-    elif gan_type == 'LS': # LS-GAN
+    elif gan_type == 'LS':  # LS-GAN
         d_loss_real = tf.reduce_mean(tf.squared_difference(d_out_real, 1.0))
         d_loss_fake = tf.reduce_mean(tf.square(d_out_fake))
         d_loss = d_loss_real + d_loss_fake
@@ -268,7 +267,7 @@ def get_losses(d_out_real, d_out_fake, x_real_onehot, x_fake_onehot_appr, gen_o,
 
 
 # A function to calculate the gradients and get training operations
-def get_train_ops(config, g_pretrain_loss, g_loss, d_loss, log_pg, temperature, global_step):
+def get_train_ops(config, g_pretrain_loss, g_loss, d_loss, global_step):
     optimizer_name = config['optimizer']
     nadv_steps = config['nadv_steps']
     d_lr = config['d_lr']
@@ -292,28 +291,24 @@ def get_train_ops(config, g_pretrain_loss, g_loss, d_loss, log_pg, temperature, 
     if optimizer_name == 'adam':
         d_optimizer = tf.train.AdamOptimizer(d_lr, beta1=0.9, beta2=0.999)
         g_optimizer = tf.train.AdamOptimizer(gadv_lr, beta1=0.9, beta2=0.999)
-        temp_optimizer = tf.train.AdamOptimizer(1e-2, beta1=0.9, beta2=0.999)
     elif optimizer_name == 'rmsprop':
         d_optimizer = tf.train.RMSPropOptimizer(d_lr)
         g_optimizer = tf.train.RMSPropOptimizer(gadv_lr)
-        temp_optimizer = tf.train.RMSPropOptimizer(1e-2)
     else:
         raise NotImplementedError
 
+    # gradient clipping
     g_grads, _ = tf.clip_by_global_norm(tf.gradients(g_loss, g_vars), grad_clip)  # gradient clipping
     g_train_op = g_optimizer.apply_gradients(zip(g_grads, g_vars))
 
     print('len of g_grads without None: {}'.format(len([i for i in g_grads if i is not None])))
     print('len of g_grads: {}'.format(len(g_grads)))
 
-    # d_train_op = d_optimizer.minimize(d_loss, var_list=d_vars)
+    # gradient clipping
     d_grads, _ = tf.clip_by_global_norm(tf.gradients(d_loss, d_vars), grad_clip)  # gradient clipping
     d_train_op = d_optimizer.apply_gradients(zip(d_grads, d_vars))
 
-    temp_grads = tf.gradients(-log_pg, [temperature])
-    temp_train_op = temp_optimizer.apply_gradients(zip(temp_grads, [temperature]))
-
-    return g_pretrain_op, g_train_op, d_train_op, temp_train_op
+    return g_pretrain_op, g_train_op, d_train_op
 
 
 # A function to get various evaluation metrics
@@ -371,7 +366,7 @@ def get_fixed_temperature(temper, i, nadv_steps, adapt):
     elif adapt == 'sigmoid':
         temper_var_np = (temper - 1) * 1 / (1 + np.exp((N / 2 - i) * 20 / N)) + 1  # sigmoid increase
     elif adapt == 'quad':
-        temper_var_np = (temper - 1) / (N - 1)**2 * i ** 2 + 1
+        temper_var_np = (temper - 1) / (N - 1) ** 2 * i ** 2 + 1
     elif adapt == 'sqrt':
         temper_var_np = (temper - 1) / np.sqrt(N - 1) * np.sqrt(i) + 1
     else:

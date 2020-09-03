@@ -13,7 +13,7 @@ class Bleu(Metrics):
         self.test_data = test_text
         self.real_data = real_text
         self.gram = gram
-        self.sample_size = 200  # BLEU scores remain nearly unchanged for self.sample_size >= 200
+        self.sample_size = 100  # BLEU scores remain nearly unchanged for self.sample_size >= 100
         self.reference = None
         self.is_first = True
         self.portion = portion  # how many portions to use in the evaluation, default to use the whole test dataset

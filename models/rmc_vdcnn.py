@@ -13,11 +13,13 @@ cnn_initializer = tf.keras.initializers.he_normal()
 fc_initializer = tf.truncated_normal_initializer(stddev=0.05)
 
 
+# The generator network based on the Relational Memory
 def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim, mem_slots, head_size, num_heads,
               hidden_dim, start_token):
     start_tokens = tf.constant([start_token] * batch_size, dtype=tf.int32)
     output_size = mem_slots * head_size * num_heads
 
+    # build relation memory module
     g_embeddings = tf.get_variable('g_emb', shape=[vocab_size, gen_emb_dim],
                                    initializer=create_linear_initializer(vocab_size))
     gen_mem = RelationalMemory(mem_slots=mem_slots, head_size=head_size, num_heads=num_heads)
@@ -30,22 +32,29 @@ def generator(x_real, temperature, vocab_size, batch_size, seq_len, gen_emb_dim,
     gen_o = tensor_array_ops.TensorArray(dtype=tf.float32, size=seq_len, dynamic_size=False, infer_shape=True)
     gen_x = tensor_array_ops.TensorArray(dtype=tf.int32, size=seq_len, dynamic_size=False, infer_shape=True)
     gen_x_onehot_adv = tensor_array_ops.TensorArray(dtype=tf.float32, size=seq_len, dynamic_size=False,
-                                                    infer_shape=True)
+                                                    infer_shape=True)  # generator output (relaxed of gen_x)
 
+    # the generator recurrent module used for adversarial training
     def _gen_recurrence(i, x_t, h_tm1, gen_o, gen_x, gen_x_onehot_adv):
         mem_o_t, h_t = gen_mem(x_t, h_tm1)  # hidden_memory_tuple
-        o_t = g_output_unit(mem_o_t)  # batch x vocab, logits not prob
+        o_t = g_output_unit(mem_o_t)  # batch x vocab, logits not probs
         gumbel_t = add_gumbel(o_t)
-        next_token = tf.cast(tf.argmax(gumbel_t, axis=1), tf.int32)
+        next_token = tf.stop_gradient(tf.argmax(gumbel_t, axis=1, output_type=tf.int32))
+        next_token_onehot = tf.one_hot(next_token, vocab_size, 1.0, 0.0)
+
         x_onehot_appr = tf.nn.softmax(tf.multiply(gumbel_t, temperature))  # one-hot-like, [batch_size x vocab_size]
+
         # x_tp1 = tf.matmul(x_onehot_appr, g_embeddings)  # approximated embeddings, [batch_size x emb_dim]
         x_tp1 = tf.nn.embedding_lookup(g_embeddings, next_token)  # embeddings, [batch_size x emb_dim]
-        gen_o = gen_o.write(i, tf.reduce_sum(tf.multiply(tf.one_hot(next_token, vocab_size, 1.0, 0.0),
-                                                         tf.nn.softmax(o_t)), 1))  # [batch_size] , prob
+
+        gen_o = gen_o.write(i, tf.reduce_sum(tf.multiply(next_token_onehot, x_onehot_appr), 1))  # [batch_size], prob
         gen_x = gen_x.write(i, next_token)  # indices, [batch_size]
+
         gen_x_onehot_adv = gen_x_onehot_adv.write(i, x_onehot_appr)
+
         return i + 1, x_tp1, h_t, gen_o, gen_x, gen_x_onehot_adv
 
+    # build a graph for outputting sequential tokens
     _, _, _, gen_o, gen_x, gen_x_onehot_adv = control_flow_ops.while_loop(
         cond=lambda i, _1, _2, _3, _4, _5: i < seq_len,
         body=_gen_recurrence,
