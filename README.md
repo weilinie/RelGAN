@@ -36,9 +36,9 @@ Note to replace [job_id] and [gpu_id] with appropriate numerical values.
 To cite this work, please use
 ```
 @INPROCEEDINGS{Nie2019ICLR,
-  author = {Weili Nie, Nina Narodytska and Ankit Patel},
+  author = {Nie, Weili and Narodytska, Nina and Patel, Ankit},
   title = {RelGAN: Relational Generative Adversarial Networks for Text Generation},
-  booktitle = {ICLR},
+  booktitle = {International conference on learning representations (ICLR)},
   year = {2019}
 }
 ```
